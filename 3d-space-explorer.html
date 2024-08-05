@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Space Explorer</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h2>3D Space Explorer</h2>
+        <p>Use WASD to move, mouse to look around</p>
+        <p>Click on celestial bodies to interact</p>
+        <p>Press 'G' to generate a new galaxy</p>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let scene, camera, renderer, stars = [];
+        let planets = [], planetInfo = {};
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let prevTime = performance.now();
+        const velocity = new THREE.Vector3();
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            const light = new THREE.PointLight(0xffffff, 1, 100);
+            light.position.set(0, 0, 0);
+            scene.add(light);
+
+            createStars();
+            createPlanets();
+            setupControls();
+
+            animate();
+        }
+
+        function createStars() {
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            for (let i = 0; i < 10000; i++) {
+                vertices.push(THREE.MathUtils.randFloatSpread(2000));
+                vertices.push(THREE.MathUtils.randFloatSpread(2000));
+                vertices.push(THREE.MathUtils.randFloatSpread(2000));
+            }
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            const material = new THREE.PointsMaterial({color: 0xffffff, size: 0.1});
+            const starField = new THREE.Points(geometry, material);
+            scene.add(starField);
+        }
+
+        function createPlanets() {
+            const planetTypes = ['Rocky', 'Gas Giant', 'Ice Giant', 'Lava', 'Ocean'];
+            for (let i = 0; i < 50; i++) {
+                const geometry = new THREE.SphereGeometry(Math.random() * 5 + 1, 32, 32);
+                const material = new THREE.MeshPhongMaterial({
+                    color: Math.random() * 0xffffff,
+                    specular: 0x050505,
+                    shininess: 100
+                });
+                const planet = new THREE.Mesh(geometry, material);
+                planet.position.set(
+                    THREE.MathUtils.randFloatSpread(500),
+                    THREE.MathUtils.randFloatSpread(500),
+                    THREE.MathUtils.randFloatSpread(500)
+                );
+                scene.add(planet);
+                planets.push(planet);
+                
+                planetInfo[planet.id] = {
+                    name: `Planet-${i}`,
+                    type: planetTypes[Math.floor(Math.random() * planetTypes.length)],
+                    radius: planet.geometry.parameters.radius,
+                    color: `#${planet.material.color.getHexString()}`
+                };
+            }
+        }
+
+        function setupControls() {
+            document.addEventListener('keydown', onKeyDown, false);
+            document.addEventListener('keyup', onKeyUp, false);
+            document.addEventListener('mousemove', onMouseMove, false);
+            document.addEventListener('click', onMouseClick, false);
+        }
+
+        function onKeyDown(event) {
+            switch (event.code) {
+                case 'KeyW': moveForward = true; break;
+                case 'KeyA': moveLeft = true; break;
+                case 'KeyS': moveBackward = true; break;
+                case 'KeyD': moveRight = true; break;
+                case 'KeyG': regenerateGalaxy(); break;
+            }
+        }
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'KeyW': moveForward = false; break;
+                case 'KeyA': moveLeft = false; break;
+                case 'KeyS': moveBackward = false; break;
+                case 'KeyD': moveRight = false; break;
+            }
+        }
+
+        function onMouseMove(event) {
+            const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+            const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+            camera.rotation.y -= movementX * 0.002;
+            camera.rotation.x -= movementY * 0.002;
+        }
+
+        function onMouseClick(event) {
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2(
+                (event.clientX / window.innerWidth) * 2 - 1,
+                -(event.clientY / window.innerHeight) * 2 + 1
+            );
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(planets);
+            if (intersects.length > 0) {
+                const planet = intersects[0].object;
+                const info = planetInfo[planet.id];
+                alert(`Planet: ${info.name}\nType: ${info.type}\nRadius: ${info.radius.toFixed(2)}\nColor: ${info.color}`);
+            }
+        }
+
+        function regenerateGalaxy() {
+            planets.forEach(planet => scene.remove(planet));
+            planets = [];
+            planetInfo = {};
+            createPlanets();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+
+            velocity.x -= velocity.x * 10.0 * delta;
+            velocity.z -= velocity.z * 10.0 * delta;
+
+            if (moveForward) velocity.z -= 400.0 * delta;
+            if (moveBackward) velocity.z += 400.0 * delta;
+            if (moveLeft) velocity.x -= 400.0 * delta;
+            if (moveRight) velocity.x += 400.0 * delta;
+
+            camera.translateX(velocity.x * delta);
+            camera.translateZ(velocity.z * delta);
+
+            prevTime = time;
+
+            planets.forEach(planet => {
+                planet.rotation.y += 0.005;
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>
